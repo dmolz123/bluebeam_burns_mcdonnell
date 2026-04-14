@@ -168,11 +168,19 @@ ${statesObj}
 // DEMO STUB
 // -----------------------------------------------------------------------------
 let demoStub = {
-  projectName:    process.env.DEMO_PROJECT_NAME || 'Demo Project',
-  documentId:     process.env.DEMO_DOCUMENT_ID  || 'DOC-001',
-  description:    process.env.DEMO_DESCRIPTION  || 'Design review — coordination update',
-  reviewers:      [{ email: 'dmolz@bluebeam.com', hasStudioAccount: true }],
-  sessionEndDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  projectName:        process.env.DEMO_PROJECT_NAME || 'Demo Project',
+  documentId:         process.env.DEMO_DOCUMENT_ID  || 'DOC-001',
+  description:        process.env.DEMO_DESCRIPTION  || 'Design review — coordination update',
+  reviewers:          [{ email: 'dmolz@bluebeam.com', hasStudioAccount: true }],
+  sessionEndDate:     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  sessionPermissions: [
+    { Type: 'Markup',       Allow: 'Allow' },
+    { Type: 'SaveCopy',     Allow: 'Allow' },
+    { Type: 'PrintCopy',    Allow: 'Allow' },
+    { Type: 'MarkupAlert',  Allow: 'Allow' },
+    { Type: 'AddDocuments', Allow: 'Deny'  },
+    { Type: 'FullControl',  Allow: 'Deny'  }
+  ]
 };
 
 // -----------------------------------------------------------------------------
@@ -728,10 +736,14 @@ app.get('/poc/state', (req, res) => res.json({ ...pocState, stub: demoStub }));
 app.get('/poc/stub',  (req, res) => res.json(demoStub));
 
 app.post('/poc/configure', (req, res) => {
-  const { projectName, documentId, description, reviewerEmail } = req.body || {};
-  if (projectName)   demoStub.projectName  = projectName;
-  if (documentId)    demoStub.documentId   = documentId;
-  if (description)   demoStub.description  = description;
+  const { projectName, documentId, description, reviewerEmail, sessionPermissions } = req.body || {};
+  if (projectName)        demoStub.projectName  = projectName;
+  if (documentId)         demoStub.documentId   = documentId;
+  if (description)        demoStub.description  = description;
+  if (sessionPermissions && Array.isArray(sessionPermissions)) {
+    demoStub.sessionPermissions = sessionPermissions;
+    logStep(`Session permissions updated: ${sessionPermissions.map(p=>`${p.Type}=${p.Allow}`).join(', ')}`, 'info');
+  }
   if (reviewerEmail && reviewerEmail !== 'dmolz@bluebeam.com') {
     if (!demoStub.reviewers.some(r => r.email === reviewerEmail)) {
       demoStub.reviewers.push({ email: reviewerEmail, hasStudioAccount: false });
@@ -936,17 +948,11 @@ app.post('/poc/create-session', async (req, res) => {
       method:  'POST',
       headers: authHeaders(accessToken),
       body:    JSON.stringify({
-        Name:           sessionName,
-        Notification:   true,
-        Restricted:     true,
-        SessionEndDate: demoStub.sessionEndDate,
-        DefaultPermissions: [
-          { Type: 'Markup',       Allow: 'Allow' },
-          { Type: 'SaveCopy',     Allow: 'Allow' },
-          { Type: 'PrintCopy',    Allow: 'Allow' },
-          { Type: 'MarkupAlert',  Allow: 'Allow' },
-          { Type: 'AddDocuments', Allow: 'Deny'  }
-        ]
+        Name:               sessionName,
+        Notification:       true,
+        Restricted:         true,
+        SessionEndDate:     demoStub.sessionEndDate,
+        DefaultPermissions: demoStub.sessionPermissions
       })
     });
     if (!resp.ok) throw new Error(`Session creation failed: ${resp.status} - ${await resp.text()}`);
@@ -957,14 +963,7 @@ app.post('/poc/create-session', async (req, res) => {
     logStep(`Session created: ID=${pocState.sessionId}`, 'success');
 
     // B&McD Session step 3 — Set Session Global Permissions explicitly
-    const sessionPermissions = [
-      { Type: 'Markup',       Allow: 'Allow' },
-      { Type: 'SaveCopy',     Allow: 'Allow' },
-      { Type: 'PrintCopy',    Allow: 'Allow' },
-      { Type: 'MarkupAlert',  Allow: 'Allow' },
-      { Type: 'AddDocuments', Allow: 'Deny'  }
-    ];
-    for (const p of sessionPermissions) {
+    for (const p of demoStub.sessionPermissions) {
       const permResp = await fetch(`${API_V1}/sessions/${pocState.sessionId}/permissions`, {
         method:  'POST',
         headers: authHeaders(accessToken),
