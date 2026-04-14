@@ -285,8 +285,8 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%
         <span class="toggle-slider"></span>
       </label>
       <div>
-        <div class="toggle-label">Inject 5-step QC Review state model</div>
-        <div class="toggle-sub">Removes existing custom states and writes the correct model before upload · no API required</div>
+        <div class="toggle-label">Inject QC Review State Model</div>
+        <div class="toggle-sub">Removes existing custom states and writes the correct model before upload · no Bluebeam API required</div>
       </div>
     </div>
   </div>
@@ -294,22 +294,9 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%
   <!-- Review / Project details -->
   <div class="card">
     <div class="card-title"><div class="card-title-icon">📋</div>Review / Project Details</div>
-    <div class="field-row cols-2">
-      <div class="field">
-        <label>Review / Project Name</label>
-        <input type="text" id="rwName" placeholder="e.g. Phase 2 Coordination Review">
-      </div>
-      <div class="field">
-        <label>Discipline</label>
-        <select id="rwDiscipline">
-          <option value="">— Select —</option>
-          <option>Architectural</option><option>Structural</option><option>Mechanical</option>
-          <option>Electrical</option><option>Plumbing</option><option>Civil</option>
-          <option>Fire Protection</option><option>Geotechnical</option><option>Landscape</option>
-          <option>Interior Design</option><option>Technology / AV / Security</option>
-          <option>General / Multi-Discipline</option>
-        </select>
-      </div>
+    <div class="field">
+      <label>Review / Project Name</label>
+      <input type="text" id="rwName" placeholder="e.g. Phase 2 Coordination Review">
     </div>
     <div class="field" style="margin-top:16px;">
       <label>Description</label>
@@ -318,6 +305,38 @@ select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%
     <div class="field" style="margin-top:16px;">
       <label>Review Deadline</label>
       <input type="date" id="rwDeadline">
+    </div>
+  </div>
+
+  <!-- Session Permissions -->
+  <div class="card">
+    <div class="card-title"><div class="card-title-icon">🔐</div>Session Permissions</div>
+    <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;line-height:1.5;">Set what reviewers can do inside this session. These are applied as both default session permissions and explicit permission overrides.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="rwPermissionsGrid">
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-Markup" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Markup</div><div style="font-size:11px;color:var(--text-3);">Place markups on documents</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-SaveCopy" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Save Copy</div><div style="font-size:11px;color:var(--text-3);">Download a copy of documents</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-PrintCopy" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Print Copy</div><div style="font-size:11px;color:var(--text-3);">Print documents from the session</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-MarkupAlert" checked style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Markup Alert</div><div style="font-size:11px;color:var(--text-3);">Send and receive markup alerts</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-AddDocuments" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Add Documents</div><div style="font-size:11px;color:var(--text-3);">Upload new files to the session</div></div>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);">
+        <input type="checkbox" id="perm-FullControl" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;">
+        <div><div style="font-weight:500;">Full Control</div><div style="font-size:11px;color:var(--text-3);">Grant admin rights to the session</div></div>
+      </label>
     </div>
   </div>
 
@@ -690,14 +709,21 @@ async function rwStart(){
   const name=document.getElementById('rwName').value.trim();
   if(!name){alert('Please enter a Review / Project Name.');return;}
 
-  const disc=document.getElementById('rwDiscipline').value;
   const desc=document.getElementById('rwDesc').value.trim();
   const injectModel=document.getElementById('rwInjectStateModel').checked;
+
+  // Build permissions array from checkboxes
+  const allPerms=['Markup','SaveCopy','PrintCopy','MarkupAlert','AddDocuments','FullControl'];
+  const sessionPermissions=allPerms.map(type=>({
+    Type: type,
+    Allow: document.getElementById('perm-'+type)?.checked ? 'Allow' : 'Deny'
+  }));
 
   await api('configure',undefined,{
     projectName: name,
     documentId:  name.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,''),
-    description: `${disc?disc+' — ':''}${desc||name}`
+    description: desc||name,
+    sessionPermissions: sessionPermissions
   });
 
   const btn=document.getElementById('rwStartBtn');
@@ -844,6 +870,9 @@ function rwReset(){
   const btn=document.getElementById('rwStartBtn');btn.disabled=false;btn.textContent='Start Review';
   const dbtn=document.getElementById('rwDownstreamBtn');dbtn.disabled=false;dbtn.textContent='Update Project Copy & Pull Metadata';dbtn.classList.remove('loading');
   document.querySelectorAll('#rwChipBox .chip:not(.primary)').forEach(c=>c.remove());
+  // Reset permissions to defaults
+  ['Markup','SaveCopy','PrintCopy','MarkupAlert'].forEach(p=>{const el=document.getElementById('perm-'+p);if(el)el.checked=true;});
+  ['AddDocuments','FullControl'].forEach(p=>{const el=document.getElementById('perm-'+p);if(el)el.checked=false;});
   ['setup','upload','session','checkout','invite','checkin','export','mlist'].forEach(id=>{const d=document.getElementById('sd-'+id);if(d){d.className='step-dot';const orig={setup:1,upload:2,session:3,checkout:4,invite:5,checkin:1,export:2,mlist:3};d.textContent=orig[id]||'·';}const l=document.getElementById('sl-'+id);if(l)l.className='step-row-label muted';});
   api('reset').catch(()=>{});
 }
