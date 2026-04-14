@@ -1014,8 +1014,12 @@ app.post('/poc/checkout-to-session', async (req, res) => {
         { method: 'POST', headers: authHeaders(accessToken), body: JSON.stringify({ SessionId: pocState.sessionId }) }
       );
 
+      // Read body once — used for both error handling and success data
+      const respText = await resp.text();
+      let respData = null;
+      try { respData = JSON.parse(respText); } catch (_) {}
+
       if (!resp.ok) {
-        const err = await resp.text();
         if (resp.status === 409) {
           logStep(`409 — releasing checkout and retrying...`, 'warn');
           const rel = await fetch(
@@ -1023,32 +1027,49 @@ app.post('/poc/checkout-to-session', async (req, res) => {
             { method: 'DELETE', headers: authHeaders(accessToken) }
           );
           if (rel.ok) {
-            const retry = await fetch(
+            const retry     = await fetch(
               `${API_V1}/projects/${pocState.projectId}/files/${pf.projectFileId}/checkout-to-session`,
               { method: 'POST', headers: authHeaders(accessToken), body: JSON.stringify({ SessionId: pocState.sessionId }) }
             );
+            const retryText = await retry.text();
             if (!retry.ok) { logStep(`Retry failed: ${retry.status}`, 'warn'); continue; }
+            try { respData = JSON.parse(retryText); } catch (_) {}
           } else { logStep(`Release failed`, 'warn'); continue; }
-        } else { logStep(`Checkout failed: ${resp.status} - ${err}`, 'warn'); continue; }
+        } else { logStep(`Checkout failed: ${resp.status} - ${respText}`, 'warn'); continue; }
       }
 
-      await sleep(1000);
+      // Per B&McD docs: checkout-to-session returns { SessionId, Id }
+      // where Id IS the session file ID — use it directly when available
+      const directSessionFileId = respData?.Id || null;
 
-      const sfResp = await fetch(
-        `${API_V1}/sessions/${pocState.sessionId}/files?includeDeleted=false`,
-        { headers: authHeaders(accessToken) }
-      );
-      if (!sfResp.ok) { logStep(`Could not list session files`, 'warn'); continue; }
+      if (directSessionFileId) {
+        const entry = { sessionFileId: directSessionFileId, projectFileId: pf.projectFileId, name: pf.name };
+        pocState.sessionFileIds.push(entry);
+        checked.push(entry);
+        logStep(`"${pf.name}" checked out (sessionFileId=${directSessionFileId})`, 'success');
+      } else {
+        // Fallback: re-query session files list
+        await sleep(2000);
+        const sfResp = await fetch(
+          `${API_V1}/sessions/${pocState.sessionId}/files?includeDeleted=false`,
+          { headers: authHeaders(accessToken) }
+        );
+        if (!sfResp.ok) { logStep(`Could not list session files: ${sfResp.status}`, 'warn'); continue; }
 
-      const sfData  = await sfResp.json();
-      const sfList  = sfData.SessionFiles || sfData.Files || [];
-      const match   = sfList.find(f => f.ProjectFileId === pf.projectFileId || f.Name === pf.name);
-      if (!match) { logStep(`Session file entry not found for "${pf.name}"`, 'warn'); continue; }
-
-      const entry = { sessionFileId: match.Id, projectFileId: pf.projectFileId, name: pf.name };
-      pocState.sessionFileIds.push(entry);
-      checked.push(entry);
-      logStep(`"${pf.name}" checked out (sessionFileId=${match.Id})`, 'success');
+        const sfData = await sfResp.json();
+        const sfList = sfData.SessionFiles || sfData.Files || [];
+        const match  = sfList.find(f =>
+          String(f.ProjectFileId) === String(pf.projectFileId) || f.Name === pf.name
+        );
+        if (!match) {
+          logStep(`Session file entry not found for "${pf.name}" (${sfList.length} files in session)`, 'warn');
+          continue;
+        }
+        const entry = { sessionFileId: match.Id, projectFileId: pf.projectFileId, name: pf.name };
+        pocState.sessionFileIds.push(entry);
+        checked.push(entry);
+        logStep(`"${pf.name}" checked out (sessionFileId=${match.Id} via list fallback)`, 'success');
+      }
     }
 
     res.json({ success: true, checked, state: pocState });
