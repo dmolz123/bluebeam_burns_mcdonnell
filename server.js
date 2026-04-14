@@ -378,7 +378,7 @@ async function getProjectUsers(projectId, accessToken) {
 async function uploadFileToProject(fileBuffer, fileName, projectId, accessToken, folderId = null) {
   logStep(`Uploading "${fileName}" to project ${projectId}${folderId ? ` (folderId=${folderId})` : ''}...`, 'info');
 
-  const metaBody = { Name: fileName, CRC: null };
+  const metaBody = { Name: fileName, CRC: null }; // null per B&McD spec — lets AWS calculate
   if (folderId) metaBody.ParentFolderId = folderId;
 
   const metaResp = await fetch(`${API_V1}/projects/${projectId}/files`, {
@@ -955,6 +955,23 @@ app.post('/poc/create-session', async (req, res) => {
     pocState.sessionId = data.Id;
     pocState.createdAt = new Date().toISOString();
     logStep(`Session created: ID=${pocState.sessionId}`, 'success');
+
+    // B&McD Session step 3 — Set Session Global Permissions explicitly
+    const sessionPermissions = [
+      { Type: 'Markup',       Allow: 'Allow' },
+      { Type: 'SaveCopy',     Allow: 'Allow' },
+      { Type: 'PrintCopy',    Allow: 'Allow' },
+      { Type: 'MarkupAlert',  Allow: 'Allow' },
+      { Type: 'AddDocuments', Allow: 'Deny'  }
+    ];
+    for (const p of sessionPermissions) {
+      const permResp = await fetch(`${API_V1}/sessions/${pocState.sessionId}/permissions`, {
+        method:  'POST',
+        headers: authHeaders(accessToken),
+        body:    JSON.stringify({ Type: p.Type, Allow: p.Allow })
+      });
+      logStep(`Session permission: ${p.Type}=${p.Allow} (${permResp.status})`, 'info');
+    }
     res.json({ success: true, sessionId: pocState.sessionId, state: pocState });
   } catch (err) {
     pocState.status = 'error';
